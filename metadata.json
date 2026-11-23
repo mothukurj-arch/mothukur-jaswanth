@@ -1,0 +1,6 @@
+{
+  "name": "AI Study Buddy – Notes to Quiz",
+  "description": "Convert long study notes or PDF documents into simple 5-6 point summaries, 5 multiple-choice questions with answers, and 3 key terms using Google Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
