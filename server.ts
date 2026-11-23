@@ -175,10 +175,40 @@ function formatApiError(err: unknown): { status: number; message: string } {
     };
   }
 
+  if (rawMessage.includes("UNAVAILABLE") || rawMessage.includes("503") || rawMessage.includes("high demand")) {
+    return {
+      status: 503,
+      message: "The AI service is temporarily experiencing high demand. Please try again in a few seconds.",
+    };
+  }
+
   return {
     status: 500,
     message: rawMessage || "Failed to generate revision pack. Please try again.",
   };
+}
+
+async function generateWithRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : "";
+      const isTransient =
+        msg.includes("503") ||
+        msg.includes("UNAVAILABLE") ||
+        msg.includes("429") ||
+        msg.includes("RESOURCE_EXHAUSTED");
+      if (!isTransient || attempt === maxAttempts) {
+        throw err;
+      }
+      const delayMs = 800 * Math.pow(2, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
 }
 
 async function startServer() {
@@ -231,8 +261,9 @@ async function startServer() {
 
         const ai = getGeminiClient();
 
-        const response = await ai.models.generateContent({
-          model: "gemini-4-hydrogen",
+        const response = await generateWithRetry(() =>
+          ai.models.generateContent({
+            model: "gemini-4-hydrogen",
           contents: `Analyze the following study notes and generate a complete student revision pack.\n\nStudy Notes:\n"""\n${combinedNotes}\n"""`,
           config: {
             systemInstruction:
@@ -291,7 +322,8 @@ async function startServer() {
               required: ["summary", "mcqs", "keyTerms"],
             },
           },
-        });
+        })
+        );
 
         const rawJson = (response.text ?? "").trim();
         if (!rawJson) {
